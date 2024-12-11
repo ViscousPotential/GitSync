@@ -26,13 +26,18 @@ import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
+import com.jcraft.jsch.JSch
+import com.jcraft.jsch.KeyPair
 import com.viscouspot.gitsync.MainActivity
 import com.viscouspot.gitsync.R
+import com.viscouspot.gitsync.util.Logger.log
 import java.io.BufferedReader
+import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.FileInputStream
 import java.io.IOException
 import java.io.InputStreamReader
+import java.nio.charset.StandardCharsets
 import kotlin.random.Random
 
 object Helper {
@@ -279,12 +284,31 @@ object Helper {
     }
 
     fun isValidGitRepo(url: String): String? {
-        val regex = Regex("^https?://([a-zA-Z0-9.-]+)/(\\S+)/(\\S+)\$")
+        val regex = Regex("^(https?|ssh://|git@)[a-zA-Z0-9.-]+(:|/)(\\S+)/(\\S+)(\\.git)?\$")
 
         return when {
-            !regex.matches(url) -> "URL must be an HTTP or HTTPS URL and follow the format 'https://domain/user/repo'"
+            !regex.matches(url) -> "URL must be a valid Git URL (HTTP/S, SSH, or git@) and follow the format"
             else -> null
         }
+    }
+
+    fun generateSSHKeyPair(): Pair<String, String> {
+        val jsch = JSch()
+        val keyPair = KeyPair.genKeyPair(jsch, KeyPair.RSA, 4096)
+
+        val privateKeyStream = ByteArrayOutputStream()
+        val publicKeyStream = ByteArrayOutputStream()
+
+        keyPair.writePrivateKey(privateKeyStream)
+        keyPair.writePublicKey(publicKeyStream, "")
+
+        val privateKey = String(privateKeyStream.toByteArray(), StandardCharsets.UTF_8)
+        val publicKey = String(publicKeyStream.toByteArray(), StandardCharsets.UTF_8)
+
+        log(privateKey)
+        log(publicKey)
+
+        return Pair(privateKey, publicKey)
     }
 }
 

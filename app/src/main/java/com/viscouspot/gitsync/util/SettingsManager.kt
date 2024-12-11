@@ -5,7 +5,6 @@ import android.net.Uri
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 import com.viscouspot.gitsync.R
-import com.viscouspot.gitsync.util.Logger.log
 import com.viscouspot.gitsync.util.provider.GitProviderManager
 
 class SettingsManager internal constructor(private val context: Context) {
@@ -121,6 +120,17 @@ class SettingsManager internal constructor(private val context: Context) {
         with(settingsSharedPref.edit()) {
             putString("gitAuthUsername", username)
             putString("gitAuthToken", accessToken)
+            apply()
+        }
+    }
+
+    fun getGitSshPrivateKey(): String {
+        return settingsSharedPref.getString("gitSshKey", "").toString()
+    }
+
+    fun setGitSshPrivateKey(gitSshKey: String) {
+        with(settingsSharedPref.edit()) {
+            putString("gitSshKey", gitSshKey)
             apply()
         }
     }

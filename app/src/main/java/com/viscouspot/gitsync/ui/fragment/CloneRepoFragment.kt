@@ -171,7 +171,6 @@ class CloneRepoFragment(
             dismissAllowingStateLoss()
             return
         }
-        val authCredentials = settingsManager.getGitAuthCredentials()
 
         val cloneDialog = ProgressDialog(requireContext(), R.style.AlertDialogTheme).apply {
             setTitle(getString(R.string.cloning_repository))
@@ -181,7 +180,7 @@ class CloneRepoFragment(
             setProgressStyle(ProgressDialog.STYLE_HORIZONTAL)
             show()
         }
-        gitManager.cloneRepository(repoUrl, dirUri, authCredentials.first, authCredentials.second,
+        gitManager.cloneRepository(repoUrl, dirUri,
             { task -> activity?.runOnUiThread { cloneDialog.setMessage("${getString(R.string.clone_message)}$task") } },
             { progress -> activity?.runOnUiThread { cloneDialog.progress = progress } },
             { error ->

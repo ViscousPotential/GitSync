@@ -31,7 +31,7 @@ class OnboardingController(
 
     fun show() {
         val authCreds = settingsManager.getGitAuthCredentials()
-        if (authCreds.first != "" && authCreds.second != "") {
+        if (authCreds.first != "" || authCreds.second != "" || settingsManager.getGitSshPrivateKey() != "") {
             settingsManager.setOnboardingStep(3)
         }
         if (settingsManager.getGitDirUri() != null) {

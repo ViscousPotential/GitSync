@@ -7,6 +7,8 @@
     <string name="auth">AUTH</string>
     <string name="git_repo_url_hint">https://git.abc/xyz.git</string>
     <string name="git_dir_path_hint">/storage/emulated/0/…</string>
+    <string name="token_example">ghp_1234abcd5678efgh</string>
+    <string name="ssh_key_example">ssh-rsa AABBCCDDEEFF112233445566</string>
 
     <string name="enable_application_observer">Auto Sync Settings</string>
     <string name="enable_accessibility_service">Please enable Git Sync under "Installed apps"</string>
@@ -114,5 +116,4 @@
     <string name="git_merge_head_path">.git/MERGE_HEAD</string>
     <string name="git_merge_msg_path">.git/MERGE_MSG</string>
     <string name="git_info_exclude_path">.git/info/exclude</string>
-    <string name="token_example">ghp_1234abcd5678efgh</string>
 </resources>

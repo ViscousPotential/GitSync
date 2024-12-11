@@ -183,13 +183,18 @@ class MainActivity : AppCompatActivity() {
         gitManager.getOAuthCredentials(uri, ::setGitCredentials)
     }
 
-    fun setGitCredentials(username: String?, accessToken: String?, onNewIntent: Boolean = false) {
-        if (username == null || accessToken == null) {
+    fun setGitCredentials(username: String?, token: String?) {
+        if (token == null) {
             return
         }
-        log(LogType.GithubAuthCredentials, "Username and Token Received")
 
-        settingsManager.setGitAuthCredentials(username, accessToken)
+        if (username == null) {
+            log(LogType.GithubAuthCredentials, "SSH Key Received")
+            settingsManager.setGitSshPrivateKey(token)
+        } else {
+            log(LogType.GithubAuthCredentials, "Username and Token Received")
+            settingsManager.setGitAuthCredentials(username, token)
+        }
 
         if (!cloneRepoFragment.isAdded) {
             cloneRepoFragment.show(supportFragmentManager, getString(R.string.clone_repo_title))
@@ -246,7 +251,7 @@ class MainActivity : AppCompatActivity() {
                 if (onboardingController.showNotificationsOrNext(true)) return
             }
         } else {
-            if (settingsManager.getOnboardingStep() != -1) {
+            if (settingsManager.getOnboardingStep() != -1 && !authDialog.isShowing && prominentDisclosure?.isShowing != true) {
                 onboardingController.show()
                 return
             }
@@ -944,7 +949,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun refreshAuthButton() {
         runOnUiThread {
-            if (settingsManager.getGitAuthCredentials().second != "") {
+            if (settingsManager.getGitAuthCredentials().second != "" || settingsManager.getGitSshPrivateKey() != "") {
                 gitAuthButton.icon = getDrawable(R.drawable.circle_check)
                 gitAuthButton.setIconTintResource(R.color.auth_green)
 

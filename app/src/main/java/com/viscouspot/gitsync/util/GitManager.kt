@@ -4,10 +4,13 @@ import android.content.Context
 import android.net.Uri
 import android.os.Looper
 import android.widget.Toast
+import com.jcraft.jsch.JSch
+import com.jcraft.jsch.Session
 import com.viscouspot.gitsync.R
 import com.viscouspot.gitsync.ui.adapter.Commit
 import com.viscouspot.gitsync.util.Helper.sendCheckoutConflictNotification
 import com.viscouspot.gitsync.util.Logger.log
+import com.viscouspot.gitsync.util.provider.GitProviderManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -15,6 +18,7 @@ import kotlinx.coroutines.withContext
 import org.eclipse.jgit.api.Git
 import org.eclipse.jgit.api.RebaseCommand
 import org.eclipse.jgit.api.ResetCommand
+import org.eclipse.jgit.api.TransportCommand
 import org.eclipse.jgit.api.errors.GitAPIException
 import org.eclipse.jgit.api.errors.InvalidRemoteException
 import org.eclipse.jgit.api.errors.JGitInternalException
@@ -34,7 +38,11 @@ import org.eclipse.jgit.lib.StoredConfig
 import org.eclipse.jgit.merge.ResolveMerger
 import org.eclipse.jgit.revwalk.RevSort
 import org.eclipse.jgit.revwalk.RevWalk
+import org.eclipse.jgit.transport.JschConfigSessionFactory
+import org.eclipse.jgit.transport.OpenSshConfig
 import org.eclipse.jgit.transport.RemoteRefUpdate
+import org.eclipse.jgit.transport.SshSessionFactory
+import org.eclipse.jgit.transport.SshTransport
 import org.eclipse.jgit.transport.UsernamePasswordCredentialsProvider
 import org.eclipse.jgit.util.io.DisabledOutputStream
 import java.io.File
@@ -46,7 +54,36 @@ import java.util.Locale
 import java.util.TimeZone
 
 class GitManager(private val context: Context, private val settingsManager: SettingsManager) {
-    fun cloneRepository(repoUrl: String, userStorageUri: Uri, username: String, token: String, taskCallback: (action: String) -> Unit, progressCallback: (progress: Int) -> Unit, failureCallback: (error: String) -> Unit, successCallback: () -> Unit) {
+    private fun applyCredentials(command: TransportCommand<*, *>) {
+        log(settingsManager.getGitProvider())
+        if (settingsManager.getGitProvider() == GitProviderManager.Companion.Provider.SSH) {
+            val sshSessionFactory = object : JschConfigSessionFactory() {
+                override fun configure(host: OpenSshConfig.Host, session: Session) {
+                    session.setConfig("StrictHostKeyChecking", "no")
+                    session.setConfig("PreferredAuthentications", "publickey,password")
+                    session.setConfig("kex", "diffie-hellman-group-exchange-sha256")
+                }
+
+                override fun createDefaultJSch(fs: org.eclipse.jgit.util.FS?): JSch {
+                    val jsch = super.createDefaultJSch(fs)
+                    jsch.addIdentity("key", settingsManager.getGitSshPrivateKey().toByteArray(), null, null)
+                    return jsch
+                }
+            }
+
+            SshSessionFactory.setInstance(sshSessionFactory)
+            command.setTransportConfigCallback { transport ->
+                if (transport is SshTransport) {
+                    transport.sshSessionFactory = sshSessionFactory
+                }
+            }
+        } else {
+            val authCredentials = settingsManager.getGitAuthCredentials()
+            command.setCredentialsProvider(UsernamePasswordCredentialsProvider(authCredentials.first, authCredentials.second))
+        }
+    }
+
+    fun cloneRepository(repoUrl: String, userStorageUri: Uri, taskCallback: (action: String) -> Unit, progressCallback: (progress: Int) -> Unit, failureCallback: (error: String) -> Unit, successCallback: () -> Unit) {
         if (!Helper.isNetworkAvailable(context)) {
             return
         }
@@ -81,7 +118,7 @@ class GitManager(private val context: Context, private val settingsManager: Sett
                     setURI(repoUrl)
                     setProgressMonitor(monitor)
                     setDirectory(File(Helper.getPathFromUri(context, userStorageUri)))
-                    setCredentialsProvider(UsernamePasswordCredentialsProvider(username, token))
+                    applyCredentials(this)
                 }.call()
 
                 log(LogType.CloneRepo, "Repository cloned successfully")
@@ -101,6 +138,10 @@ class GitManager(private val context: Context, private val settingsManager: Sett
                 failureCallback(e.localizedMessage ?: context.getString(R.string.clone_failed))
                 return@launch
             } catch (e: GitAPIException) {
+                e.printStackTrace()
+                log(e)
+                log(e.localizedMessage)
+                log(e.cause)
                 failureCallback(context.getString(R.string.clone_failed))
                 return@launch
             }
@@ -129,7 +170,7 @@ class GitManager(private val context: Context, private val settingsManager: Sett
         }
     }
 
-    fun downloadChanges(userStorageUri: Uri, username: String, token: String, scheduleNetworkSync: () -> Unit, onSync: () -> Unit): Boolean? {
+    fun downloadChanges(userStorageUri: Uri, scheduleNetworkSync: () -> Unit, onSync: () -> Unit): Boolean? {
         if (conditionallyScheduleNetworkSync(scheduleNetworkSync)) {
             return null
         }
@@ -138,11 +179,10 @@ class GitManager(private val context: Context, private val settingsManager: Sett
             log(LogType.PullFromRepo, "Getting local directory")
             val repo = FileRepository("${Helper.getPathFromUri(context, userStorageUri)}/${context.getString(R.string.git_path)}")
             val git = Git(repo)
-            val cp = UsernamePasswordCredentialsProvider(username, token)
 
             log(LogType.PullFromRepo, "Fetching changes")
             val fetchResult = git.fetch().apply {
-                setCredentialsProvider(cp)
+                applyCredentials(this)
             }.call()
 
             if (conditionallyScheduleNetworkSync(scheduleNetworkSync)) {
@@ -156,7 +196,7 @@ class GitManager(private val context: Context, private val settingsManager: Sett
                 log(LogType.PullFromRepo, "Pulling changes")
                 onSync.invoke()
                 val result = git.pull().apply {
-                    setCredentialsProvider(cp)
+                    applyCredentials(this)
                     remote = "origin"
                 }.call()
 
@@ -201,7 +241,7 @@ class GitManager(private val context: Context, private val settingsManager: Sett
         return null
     }
 
-    fun uploadChanges(userStorageUri: Uri, syncMessage: String, username: String, token: String, scheduleNetworkSync: () -> Unit, onSync: () -> Unit): Boolean? {
+    fun uploadChanges(userStorageUri: Uri, syncMessage: String, scheduleNetworkSync: () -> Unit, onSync: () -> Unit): Boolean? {
         if (conditionallyScheduleNetworkSync(scheduleNetworkSync)) {
             return null
         }
@@ -240,7 +280,7 @@ class GitManager(private val context: Context, private val settingsManager: Sett
                 val committerEmail = config.getString("user", null, "email")
                 var committerName = config.getString("user", null, "name")
                 if (committerName == null || committerName.equals("")) {
-                    committerName = username
+                    committerName = settingsManager.getGitAuthCredentials().first
                 }
 
                 git.commit().apply {
@@ -257,7 +297,7 @@ class GitManager(private val context: Context, private val settingsManager: Sett
 
             log(LogType.PushToRepo, "Pushing changes")
             val pushResults = git.push().apply {
-                setCredentialsProvider(UsernamePasswordCredentialsProvider(username, token))
+                applyCredentials(this)
                 remote = "origin"
             }.call()
             for (pushResult in pushResults) {
@@ -287,7 +327,7 @@ class GitManager(private val context: Context, private val settingsManager: Sett
                                     setOperation(RebaseCommand.Operation.ABORT)
                                 }.call()
 
-                                downloadChanges(userStorageUri, username, token, scheduleNetworkSync, onSync)
+                                downloadChanges(userStorageUri, scheduleNetworkSync, onSync)
                                 return false
                             }
                             break

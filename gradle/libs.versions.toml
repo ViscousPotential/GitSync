@@ -1,5 +1,6 @@
 [versions]
 agp = "8.3.0"
+jsch = "0.2.21"
 kotlin = "1.9.0"
 coreKtx = "1.13.1"
 jgit = "3.7.1.201504261725-r"
@@ -16,6 +17,7 @@ workRuntimeKtx = "2.9.1"
 coreKtxVersion = "1.6.1"
 
 [libraries]
+jsch = { module = "com.github.mwiede:jsch", version.ref = "jsch" }
 security-crypto = { group = "androidx.security", name = "security-crypto", version.ref = "securityCryptoKtx" }
 squareup-okhttp3 = { group = "com.squareup.okhttp3", name = "okhttp", version.ref = "okhttp" }
 jgit = { group = "org.eclipse.jgit", name = "org.eclipse.jgit", version.ref = "jgit" }
